@@ -24,7 +24,11 @@ ui <- fluidPage(# Application title
       verbatimTextOutput("login_status"),
       
     # Session    
-      verbatimTextOutput("download_status")
+      verbatimTextOutput("download_status"),
+    
+    # Testing download functions
+      hr(),
+      downloadButton("download", "Test download .tsv")
     ),
     
     # Show selected data
@@ -39,7 +43,7 @@ ui <- fluidPage(# Application title
         ),
         selected = 1
       ),
-      downloadButton("download_session", label = "Download .csv"),
+      downloadButton("download_volume", label = "Download .tsv"),
       tableOutput("preview"),
               hr(),
               selectInput(
@@ -94,21 +98,30 @@ server <- function(input, output) {
     input$checkbox
   })
   
-  session_data <- reactive({
-    out <- databraryr::get_session_as_df(as.numeric(input$volume_id))
+  data_volume <- reactive({
+    out <- databraryr::list_sessions(as.numeric(input$volume_id))
     if (!is.data.frame(out)) {
       validate(paste0("'", input$volume_id, "' does not have a session CSV"))
     }
     out
   })
   
+  output$download_volume <- downloadHandler(
+    filename = function() {
+      paste0("volume_", input$volume_id, "_sessions", ".tsv")
+    },
+    content = function(file) {
+      vroom::vroom_write(data_volume(), file)
+    }
+  )
+
   output$preview <- renderTable({
-    session_data() |>
+    data_volume() |>
       dplyr::select(session_id, session_name, session_date) |>
     head()
   })
   
-  this_session_data <- reactive({
+  data_session <- reactive({
     req(input$session_id)
     out <- databraryr::list_assets_in_session(as.numeric(input$session_id)) |>
       dplyr::select(asset_id, name, mimetype)
@@ -128,11 +141,11 @@ server <- function(input, output) {
   })
   
   output$this_session_data_table <- renderTable({
-    this_session_data()
+    data_session()
   })
   
   observeEvent(input$volume_id, {
-    session_choices <- unique(session_data()$session_id)
+    session_choices <- unique(data_volume()$session_id)
     updateSelectInput(inputId = "session_id", choices = session_choices)
   })
   
@@ -140,35 +153,53 @@ server <- function(input, output) {
     select(session_table, session_id)
   })
   
-  output$download_status <- reactive({
-    status$session_csv_download
-  })
+  # output$download_status <- reactive({
+  #   status$session_csv_download
+  # })
+  # 
   
-  observeEvent(input$download_session, {
-    session_csv_fn <- paste0("./vol_", input$volume_id, ".csv")
-    databraryr::download_session_csv(
-      vol_id = as.numeric(input$volume_id),
-      file_name = paste0(as.numeric(input$volume_id), ".csv"),
-      target_dir = "."
-    )
-    status$session_csv_download <-
-      paste("Downloaded :'", session_csv_fn, "'.")
-  })
-  
-  output$session_csv_download <- downloadHandler(
-    filename = function() {
-      paste0("./vol_", input$volume_id, ".csv")
-    },
-    content = function(file) {
-      vroom::vroom_write(session_data(), file)
-    }
-  )
+  # observeEvent(input$download_session, {
+  #   session_csv_fn <- paste0("./vol_", input$volume_id, ".csv")
+  #   databraryr::download_session_csv(
+  #     vol_id = as.numeric(input$volume_id),
+  #     file_name = paste0(as.numeric(input$volume_id), ".csv"),
+  #     target_dir = "."
+  #   )
+  #   status$session_csv_download <-
+  #     paste("Downloaded :'", session_csv_fn, "'.")
+  # })
+  # 
   
   session_table <- reactive({
-    df <- session_data()
-    df |>
+    session_data() |>
       dplyr::select(session_id, session_name, session_date)
   })
+  
+  # Testing downloads
+  data <- reactive({
+    out <- databraryr::list_sessions()
+      if (!is.data.frame(out)) {
+        validate(
+          paste0(
+            "'volume ",
+            input$volume_id,
+            " session ",
+            input$session_id,
+            "' is not available."
+          )
+        )
+      }
+    out
+  })
+  
+  output$download <- downloadHandler(
+    filename = function() {
+      paste0("test_vol_1", ".tsv")
+    },
+    content = function(file) {
+      vroom::vroom_write(data(), file)
+    }
+  )
 }
 
 # Run the application
